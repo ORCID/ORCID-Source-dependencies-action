@@ -1,0 +1,109 @@
+name: 'orcid_source_dependencies'
+description: 'install orcid_source dependencies into the local maven repo to be used by later steps'
+
+inputs:
+  version_tag_numeric:
+    description: 'version tag to use'
+    required: false
+    type: string
+
+runs:
+  using: "composite"
+  steps:
+    - name: adjust the path to include the actions path so scripts in the action can be run
+      run: echo "${{ github.action_path }}" >> $GITHUB_PATH
+      shell: bash
+
+    - name: populate orcid-persistence/src/main/resources/release_name.txt with numeric tag
+      run: |
+        echo "$version_tag_numeric" > orcid-persistence/src/main/resources/release_name.txt
+      shell: bash
+      env:
+        version_tag_numeric: "${{ inputs.version_tag_numeric }}"
+
+    - name: bump version of the parent pom and connected projects
+      run: |
+        mvn -T 1C --batch-mode versions:set -DskipTests \
+            -DnewVersion="$version_tag_numeric" -DgenerateBackupPoms=false
+      shell: bash
+      env:
+        version_tag_numeric: "${{ inputs.version_tag_numeric }}"
+
+    - name: bump the tagged version in the poms of projects not tied to the parent pom (orcid-test)
+      run: |
+        mvn -T 1C --batch-mode versions:set -DskipTests \
+            -DnewVersion="$version_tag_numeric" -DgenerateBackupPoms=false -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn \
+            --projects orcid-test
+      shell: bash
+      env:
+        version_tag_numeric: "${{ inputs.version_tag_numeric }}"
+
+    - name: install orcid-parent into our local maven repo because the builds depend a version release
+      run: |
+        mvn -T 1C --batch-mode --non-recursive clean install -DskipTests \
+            -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn
+      shell: bash
+      env:
+        version_tag_numeric: "${{ inputs.version_tag_numeric }}"
+
+    - name: install orcid-test into our local maven repo because the builds depend a version release
+      run: |
+        mvn -T 1C --batch-mode clean install -DskipTests\
+            -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn \
+            --projects orcid-test
+      shell: bash
+      env:
+        version_tag_numeric: "${{ inputs.version_tag_numeric }}"
+
+    - name: install orcid-utils into our local maven repo because the builds depend a version release
+      run: |
+        mvn -T 1C --batch-mode clean install -DskipTests \
+            -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn \
+            --projects orcid-utils
+      shell: bash
+      env:
+        version_tag_numeric: "${{ inputs.version_tag_numeric }}"
+
+    - name: install orcid-persistence into our local maven repo because orcid-core depends on it
+      run: |
+        mvn -T 1C --batch-mode clean install -DskipTests \
+            -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn \
+            --projects orcid-persistence
+      shell: bash
+      env:
+        version_tag_numeric: "${{ inputs.version_tag_numeric }}"
+
+    - name: install orcid-core into our local maven repo because the builds depend a version release
+      run: |
+        mvn -T 1C --batch-mode clean install -DskipTests \
+            -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn \
+            --projects orcid-core
+      shell: bash
+      env:
+        version_tag_numeric: "${{ inputs.version_tag_numeric }}"
+
+    - name: install orcid-api-common into our local maven repo because the deploy depends on this orcid-web orcid-iapi orcid-api
+      run: |
+        mvn -T 1C --batch-mode clean install -DskipTests \
+            -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn \
+            --projects orcid-api-common
+      shell: bash
+      env:
+        version_tag_numeric: "${{ inputs.version_tag_numeric }}"
+
+    - name: check some build related things
+      run: |
+        git --version
+        git config user.name "GitHub Actions Bot"
+        git config user.email "<>"
+        git status
+        git diff
+        if [[ -d ~/.m2/repository/ ]];then
+          find ~/.m2/repository/ -name '*.jar' | grep orcid
+        fi
+        if [[ -d ~/.m2/repository/org/orcid/orcid-test/ ]];then
+          ls -la ~/.m2/repository/org/orcid/orcid-test/
+        fi
+      shell: bash
+
+
